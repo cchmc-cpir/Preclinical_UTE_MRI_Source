@@ -5,7 +5,7 @@ Author: Peter J. Niedbalski
 
 Contact: pniedbalski@kumc.edu
 
-## cpir_UTE_V5:
+## cpir_UTE_V5
 This sequence is a 3D radial MRI sequence that uses Golden Means Projection Ordering to encode images. Several layers of functionality have been added, including
 * Shifted Acquisition Window to mitigate points corrupted by digital filter
 * Multiple, interleaved TE acquisition

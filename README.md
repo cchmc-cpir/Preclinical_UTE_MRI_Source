@@ -2,6 +2,7 @@
 Source code for radial UTE sequences developed for the CCHMC Bruker 7T animal MRI system.
 
 Author: Peter J. Niedbalski
+
 Contact: pniedbalski@kumc.edu
 
 ## cpir_UTE_V5:

@@ -1,0 +1,144 @@
+function gen_config_file_v2(path)
+
+%Function to write out a configuration file for xenon images of mice -
+%write to a text file things like date of birth, scan type, mouse type,
+%etc...
+
+%% Start by loading in FIDs so that I can see how many rays that need to be kept
+%% Make sure we have the path we need
+if nargin == 0
+    [path]=uigetdir('C:\','Select Folder in Which Method File is Located');
+    cd(path)
+else
+    cd(path)
+end
+%% Get Method File/Files
+methodfiles = dir('*ethod*');
+% If there are multiple method files, we need to separate into measured and
+% theoretical
+if length(methodfiles)>1
+    if methodfiles(1).bytes > methodfiles(2).bytes
+        theo_method = methodfiles(2).name;
+        meas_method = methodfiles(1).name;
+    elseif methodfiles(2).bytes > methodfiles(1).bytes
+        theo_method = methodfiles(1).name;
+        meas_method = methodfiles(2).name;
+    else
+        error('Unable to differentiate measured and theoretical method file')
+    end
+else
+    method_file = methodfiles.name;
+    theo_method = method_file;
+    meas_method = method_file;
+end
+
+fid=fopen(char(theo_method));
+methodRead=textscan(fid,'%s','delimiter','\n');
+methodRead=methodRead{1};
+for index=1:size(methodRead,1)
+	testStr=char(methodRead{index});
+    if contains(testStr,'##$AcqShift') %Number of points for acquisition shift
+        AcqShift=str2num(testStr(13:end));
+    end
+    if contains(testStr,'##$NPro') %Number of Projections
+        NPro=str2num(testStr(9:end));
+    end
+    if contains(testStr,'##$NumTEs=') %NumTEs
+        NumTEs=str2num(testStr(11:end));
+    end
+    if contains(testStr,'##$FlybackYN') %Flyback Yes or No
+        FlybackYN = testStr(14:end);
+    end
+    if contains(testStr,'##$Method')
+        Method=(testStr(11:end));
+    end
+    if contains(testStr,'##$DiffusionYN=') %Diffusion Encoding YN
+        DiffusionYN = testStr(16:end);
+    end    
+    if contains(testStr,'##$Nbvalue=') %Diffusion Encoding YN
+        Nbvalue = str2num(testStr(12:end));
+    end  
+    if contains(testStr,'##$PVM_SPackArrNSlices=') %Undersampling Parameters
+        NSlices = str2num(methodRead{index+1});
+    end
+    if contains(testStr,'##$PVM_NRepetitions=') %Repetitions
+        Repetitions = str2num(testStr(21:end));
+    end
+end
+
+if contains(Method,'ute','IgnoreCase',true)
+    Seq = 'Radial';
+elseif contains(Method,'spiral','IgnoreCase',true)
+    Seq = 'Spiral';
+else
+    error('Cannot Determine Sequence Type')
+end
+
+
+FIDs = Bruker_Load('fid');
+if strcmp(Seq,'Radial')
+    if strcmp(FlybackYN,'Yes')
+        FIDs = reshape(FIDs,[],NPro*Repetitions);
+        Nk0 = NPro*Repetitions;
+    elseif strcmp(DiffusionYN,'Yes')
+        FIDs = reshape(FIDs,[],NPro*NumTEs*Nbvalue*Repetitions);
+        Nk0 = NPro*NumTEs*Nbvalue*Repetitions;
+    else
+        FIDs = reshape(FIDs,[],NPro*NumTEs*Repetitions);
+        Nk0 = NPro*NumTEs*Repetitions;
+    end
+else
+   % if strcmp(DiffusionYN,'No')
+        FIDs = reshape(FIDs,[],NPro*NSlices*Repetitions);
+        Nk0 = NPro*NSlices*Repetitions;
+ %   else
+ %       FIDs = reshape(FIDs,[],NPro*NSlices*Nbvalue*Repetitions);
+ %       Nk0 = NPro*NSlices*Repetitions*Nbvalue;
+ %   end
+end
+
+%Find the number of zeros used in zerofilling
+numZeroFill = find(FIDs(:,1)==0);
+numZeroFill(numZeroFill < 10) = [];
+%Kill the zero-filled FID points
+FIDs(numZeroFill,:)=[];
+%Delete those points from the FIDs
+FIDs(1:AcqShift,:) = [];
+
+%% Here's where I can select to remove some of the rays if I so desire
+%Prompt user to say if we need to throw out some points - This is a better
+%way to do this than by debugging
+k0figA = figure('Name','First Point of FIDs','units','normalized','outerposition',[0 0.04 1 .96]);
+plot(1:Nk0,squeeze(abs(FIDs(1,:))),'k-*')
+
+%% Get parameters from the scan
+
+prompt = {'Subject (Mouse or Phantom)','Mouse Strain:','Mouse Mass','Mouse Sex','DOB','Breath-hold type: (R for retrogating)','Num Rays to Keep','Trajectory Delay (In Multiples of Dwell Time)','Notes:'};
+name = ['Parameters for Data in File ' path];
+dims = [1 250];
+definput = {'Mouse','C57BL-6J','25','M',datestr(date,29),'Inspiration','0','0',''};
+parameters = inputdlg(prompt,name,dims,definput);
+Subject = parameters{1,1};
+MouseType = parameters{2,1};
+Sex = parameters{4,1};
+Mass = parameters{3,1};
+BreathType = parameters{6,1};
+DOB = parameters{5,1};
+KeepRays = parameters{7,1};
+traj_delay = parameters{8,1};
+Notes = parameters{9,1};
+
+close;
+%% Write out parameters to text file
+fileID = fopen('ConfigFile_V2.txt','w');
+fprintf(fileID,['##$Subject=' Subject '\n']);
+fprintf(fileID,['##$MouseStrain=' MouseType '\n']);
+fprintf(fileID,['##$MouseSex=' Sex '\n']);
+fprintf(fileID,['##$MouseMass=' Mass '\n']);
+fprintf(fileID,['##$MouseDOB=' DOB '\n']);
+fprintf(fileID,['##$BreathType=' BreathType '\n']);
+fprintf(fileID,['##$KeepRays=' KeepRays '\n']);
+fprintf(fileID,['##$TrajDelay=' traj_delay '\n']);
+fprintf(fileID,['##$Notes=' Notes '\n']);
+fclose(fileID);
+
